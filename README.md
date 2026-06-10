@@ -1,6 +1,16 @@
 # Self-Healing Infrastructure Platform with GitOps + SLO Enforcement
 
+[![Deploy](https://github.com/karthickk022/self-healing-platform/actions/workflows/deploy.yaml/badge.svg)](https://github.com/karthickk022/self-healing-platform/actions/workflows/deploy.yaml)
+
 A production-grade Kubernetes platform on **AWS EKS** that automatically detects SLO breaches, triggers runbook-driven remediation, and enforces policy-as-code — all observable via a live Grafana dashboard.
+
+## Demo
+
+![SLO Breach → Auto-Remediation → Recovery](docs/slo-recovery-demo.png)
+
+*Injected 40% error rate → Prometheus alerts fire → Alertmanager webhook → remediation scales 2→5 pods + restarts → SLI recovers above SLO target.*
+
+[▶️ Watch full demo video (coming soon)]()
 
 ## Architecture
 

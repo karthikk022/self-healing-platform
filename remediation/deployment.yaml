@@ -16,24 +16,11 @@ spec:
         app: remediation-service
     spec:
       serviceAccountName: remediation-sa
-      volumes:
-        - name: code
-          configMap:
-            name: remediation-code
       containers:
         - name: remediation
-          image: python:3.11-slim
-          command: ["sh", "-c"]
-          args:
-            - |
-              pip install --no-cache-dir fastapi uvicorn kubernetes requests -q 2>&1
-              python /app/main.py
+          image: ghcr.io/karthickk022/self-healing-platform/remediation-service:latest
           ports:
             - containerPort: 8080
-          volumeMounts:
-            - name: code
-              mountPath: /app/main.py
-              subPath: main.py
           env:
             - name: SCALE_UP_COUNT
               value: "5"

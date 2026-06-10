@@ -17,6 +17,55 @@ env:
   EKS_CLUSTER: self-healing-platform
 
 jobs:
+  docker-build:
+    name: Build & Push Remediation Image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: remediation
+          push: true
+          tags: ghcr.io/${{ github.repository }}/remediation-service:latest
+
+jobs:
+  docker-build:
+    name: Build & Push Remediation Image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: remediation
+          push: true
+          tags: ghcr.io/${{ github.repository }}/remediation-service:latest
+
   terraform-check:
     name: Terraform Check
     runs-on: ubuntu-latest
@@ -60,8 +109,7 @@ jobs:
             policies:
               - 'policies/kyverno/**'
             remediation:
-              - 'remediation/deployment.yaml'
-              - 'remediation/main.py'
+              - 'remediation/**'
             sample-app:
               - 'sample-app/deployment.yaml'
               - 'sample-app/main.py'
