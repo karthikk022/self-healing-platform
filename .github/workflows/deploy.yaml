@@ -114,5 +114,5 @@ jobs:
           for app in $apps; do
             echo "Syncing $app..."
             argocd app sync "$app" --grpc-web --insecure || true
-            argocd app wait "$app" --grpc-web --insecure --health || true
+            argocd app wait "$app" --grpc-web --insecure --health --timeout 120 || true
           done
