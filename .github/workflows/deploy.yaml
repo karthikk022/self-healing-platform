@@ -100,19 +100,19 @@ jobs:
 
       - name: ArgoCD login
         run: |
-          argocd login \
-            ${{ secrets.ARGOCD_SERVER }}:80 \
+          yes | argocd login \
+            ${{ secrets.ARGOCD_SERVER }}:443 \
             --username admin \
             --password ${{ secrets.ARGOCD_PASSWORD }} \
-            --plaintext \
+            --insecure \
             --grpc-web
 
       - name: Sync all apps
         run: |
-          apps=$(argocd app list --grpc-web --plaintext -o name 2>&1) || true
+          apps=$(argocd app list --grpc-web --insecure -o name 2>&1) || true
           echo "Found apps: $apps"
           for app in $apps; do
             echo "Syncing $app..."
-            argocd app sync "$app" --grpc-web --plaintext || true
-            argocd app wait "$app" --grpc-web --plaintext --health || true
+            argocd app sync "$app" --grpc-web --insecure || true
+            argocd app wait "$app" --grpc-web --insecure --health || true
           done
