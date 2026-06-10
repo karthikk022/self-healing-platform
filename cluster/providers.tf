@@ -1,0 +1,9 @@
+provider "helm" {
+  kubernetes {
+    config_path = local_file.kubeconfig.filename
+  }
+}
+
+provider "kubectl" {
+  config_path = local_file.kubeconfig.filename
+}

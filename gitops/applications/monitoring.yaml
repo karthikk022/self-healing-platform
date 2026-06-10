@@ -1,0 +1,96 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: monitoring
+  namespace: argocd
+spec:
+  project: self-healing-platform
+  source:
+    repoURL: https://prometheus-community.github.io/helm-charts
+    chart: kube-prometheus-stack
+    targetRevision: 62.*
+    helm:
+      values: |
+        prometheus:
+          prometheusSpec:
+            ruleSelectorNilUsesHelmValues: false
+            serviceMonitorSelectorNilUsesHelmValues: false
+          retention: 7d
+        alertmanager:
+          config:
+            global:
+              resolve_timeout: 5m
+            route:
+              group_by: ['namespace', 'alertname']
+              group_wait: 10s
+              group_interval: 30s
+              repeat_interval: 1h
+              receiver: 'remediation-webhook'
+              routes:
+                - receiver: 'remediation-webhook'
+                  match:
+                    severity: 'critical'
+            receivers:
+              - name: 'remediation-webhook'
+                webhook_configs:
+                  - url: 'http://remediation-service.remediation.svc:8080/webhook'
+                    send_resolved: true
+        grafana:
+          adminPassword: admin123
+          defaultDashboardsEnabled: true
+          dashboardProviders:
+            dashboardproviders.yaml:
+              apiVersion: 1
+              providers:
+                - name: slo
+                  orgId: 1
+                  folder: SLO
+                  type: file
+                  disableDeletion: false
+                  editable: true
+                  options:
+                    path: /var/lib/grafana/dashboards/slo
+          dashboards:
+            slo:
+              slo-dashboard:
+                json: |
+                  {
+                    "title": "SLO Dashboard",
+                    "uid": "slo-dashboard",
+                    "version": 1,
+                    "panels": [
+                      {
+                        "title": "Error Budget Remaining",
+                        "type": "gauge",
+                        "gridPos": {"h": 8, "w": 8, "x": 0, "y": 0},
+                        "targets": [{"expr": "slo:error_budget_remaining:ratio", "legendFormat": "{{slo}}"}]
+                      },
+                      {
+                        "title": "SLI Trend",
+                        "type": "graph",
+                        "gridPos": {"h": 8, "w": 16, "x": 8, "y": 0},
+                        "targets": [{"expr": "slo:sli:ratio_rate5m", "legendFormat": "{{slo}}"}]
+                      },
+                      {
+                        "title": "Burn Rate",
+                        "type": "stat",
+                        "gridPos": {"h": 6, "w": 8, "x": 0, "y": 8},
+                        "targets": [{"expr": "slo:burn_rate:ratio_rate1h", "legendFormat": "{{slo}}"}]
+                      },
+                      {
+                        "title": "Remediation Events",
+                        "type": "table",
+                        "gridPos": {"h": 6, "w": 16, "x": 8, "y": 8},
+                        "targets": [{"expr": "remediation_actions_total", "legendFormat": "{{action}}"}]
+                      }
+                    ]
+                  }
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

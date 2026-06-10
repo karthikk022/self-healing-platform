@@ -1,0 +1,40 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: slo-rules
+  namespace: monitoring
+  labels:
+    prometheus: kube-prometheus-stack
+    role: alert-rules
+spec:
+  groups:
+    - name: slo-rules
+      interval: 30s
+      rules:
+        - record: slo:sli:success_rate:ratio_rate5m
+          expr: |
+            sum(rate(http_requests_total{code!~"5.."}[5m]) or vector(0))
+            /
+            max(sum(rate(http_requests_total[5m]) or vector(1)))
+
+        - alert: SLOTargetBreach
+          expr: slo:sli:success_rate:ratio_rate5m < 0.99
+          for: 2m
+          labels:
+            severity: critical
+            namespace: sample-app
+            deployment: sample-app
+          annotations:
+            summary: "SLO breach detected"
+            description: "Success rate dropped below 99%"
+
+        - alert: HighErrorRate
+          expr: slo:sli:success_rate:ratio_rate5m < 0.95
+          for: 1m
+          labels:
+            severity: critical
+            namespace: sample-app
+            deployment: sample-app
+          annotations:
+            summary: "High error rate"
+            description: "Error rate exceeded 5%"
