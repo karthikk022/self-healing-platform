@@ -134,6 +134,25 @@ kubectl get secret monitoring-grafana -n monitoring -o jsonpath="{.data.admin-pa
 
 This injects a high error rate into the sample app, triggering Prometheus alerts, which fire the remediation webhook, which scales up / restarts pods automatically.
 
+## CI/CD Pipeline
+
+A GitHub Actions workflow (`.github/workflows/deploy.yaml`) runs on every push to `main`:
+
+| Job | Trigger | Action |
+|-----|---------|--------|
+| `terraform` | Any push to `cluster/` | `terraform fmt → init → validate → plan (PR) / apply (push)` |
+| `deploy-k8s` | Push to `main` | Applies PrometheusRule, Kyverno policies, restarts pods on file changes |
+| `argocd-sync` | After `deploy-k8s` | Syncs ArgoCD applications + waits for health |
+
+### Required GitHub Secrets
+
+| Secret | Description |
+|--------|-------------|
+| `AWS_ACCESS_KEY_ID` | IAM access key with EKS + Terraform permissions |
+| `AWS_SECRET_ACCESS_KEY` | Corresponding secret key |
+| `ARGOCD_SERVER` | ArgoCD server URL (e.g. `a99a77ef....elb.amazonaws.com`) |
+| `ARGOCD_PASSWORD` | ArgoCD admin password |
+
 ## Clean Up
 
 ```bash
