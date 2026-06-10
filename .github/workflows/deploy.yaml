@@ -25,6 +25,9 @@ jobs:
         working-directory: cluster
     steps:
       - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9
       - name: Terraform fmt
         run: terraform fmt -check -diff
         continue-on-error: true
@@ -91,6 +94,10 @@ jobs:
           curl -sSL -o /usr/local/bin/argocd https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64
           chmod +x /usr/local/bin/argocd
 
+      - name: Check ArgoCD connectivity
+        run: |
+          curl -sIk --max-time 10 https://${{ secrets.ARGOCD_SERVER }}/api/version 2>&1 || echo "CURL_EXIT=$?"
+
       - name: ArgoCD login
         run: |
           argocd login \
@@ -102,7 +109,9 @@ jobs:
 
       - name: Sync all apps
         run: |
-          for app in $(argocd app list --grpc-web -o name 2>/dev/null); do
+          apps=$(argocd app list --grpc-web -o name 2>&1) || true
+          echo "Found apps: $apps"
+          for app in $apps; do
             echo "Syncing $app..."
             argocd app sync "$app" --grpc-web || true
             argocd app wait "$app" --grpc-web --health || true
