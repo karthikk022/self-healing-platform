@@ -20,16 +20,19 @@ config = (
     '  - name: "null"\n'
     '  - name: "remediation-webhook"\n'
     "    webhook_configs:\n"
-    "      - url: http://remediation-service.remediation.svc:8080/webhook\n"
-    "        send_resolved: true\n"
+     "      - url: http://remediation-service.remediation.svc:8080/webhook\n"
+     "        send_resolved: true\n"
+     "        headers:\n"
+     '          X-Webhook-Secret: "e7b2c1a8f94d63e2b0a7c3f59e81d42a"\n'
 )
 
 encoded = base64.b64encode(config.encode()).decode()
 patch = json.dumps({"data": {"alertmanager.yaml": encoded}})
 
-kubeconfig = "C:/Users/User/projects/self-healing-platform/cluster/kubeconfig"
+kubeconfig = os.environ.get("KUBECONFIG")
 env = os.environ.copy()
-env["KUBECONFIG"] = kubeconfig
+if kubeconfig:
+    env["KUBECONFIG"] = kubeconfig
 
 result = subprocess.run(
     ["kubectl", "patch", "secret", "alertmanager-monitoring-kube-prometheus-alertmanager",

@@ -13,10 +13,24 @@ spec:
       rules:
         - record: slo:sli:success_rate:ratio_rate5m
           expr: |
-            sum(rate(http_requests_total{code!~"5.."}[5m]) or vector(0))
+            sum(rate(http_requests_total{status!~"5.."}[5m]))
             /
-            max(sum(rate(http_requests_total[5m]) or vector(1)))
+            sum(rate(http_requests_total[5m]))
 
+        - record: slo:target:availability
+          expr: "0.999"
+
+        - record: slo:error_budget_remaining:ratio
+          expr: |
+            (1 - slo:sli:success_rate:ratio_rate5m) / (1 - slo:target:availability)
+
+        - record: slo:burn_rate:ratio_rate1h
+          expr: |
+            (1 - slo:sli:success_rate:ratio_rate5m) / (1 - slo:target:availability)
+
+    - name: slo-alerts
+      interval: 30s
+      rules:
         - alert: SLOTargetBreach
           expr: slo:sli:success_rate:ratio_rate5m < 0.99
           for: 2m
@@ -27,6 +41,17 @@ spec:
           annotations:
             summary: "SLO breach detected"
             description: "Success rate dropped below 99%"
+
+        - alert: ErrorBudgetBurned
+          expr: slo:error_budget_remaining:ratio < 0.5
+          for: 1m
+          labels:
+            severity: critical
+            namespace: sample-app
+            deployment: sample-app
+          annotations:
+            summary: "Error budget burned"
+            description: "More than 50% of error budget consumed"
 
         - alert: HighErrorRate
           expr: slo:sli:success_rate:ratio_rate5m < 0.95

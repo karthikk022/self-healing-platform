@@ -25,18 +25,25 @@ spec:
               group_wait: 10s
               group_interval: 30s
               repeat_interval: 1h
-              receiver: 'remediation-webhook'
+              receiver: 'null'
               routes:
+                - receiver: 'null'
+                  matchers:
+                    - alertname = "Watchdog"
                 - receiver: 'remediation-webhook'
-                  match:
-                    severity: 'critical'
+                  matchers:
+                    - severity = "critical"
             receivers:
+              - name: 'null'
               - name: 'remediation-webhook'
                 webhook_configs:
                   - url: 'http://remediation-service.remediation.svc:8080/webhook'
                     send_resolved: true
+                    headers:
+                      X-Webhook-Secret: "e7b2c1a8f94d63e2b0a7c3f59e81d42a"
         grafana:
           adminPassword: admin123
+          # For production, replace with grafana.existingSecret instead.
           defaultDashboardsEnabled: true
           dashboardProviders:
             dashboardproviders.yaml:

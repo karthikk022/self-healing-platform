@@ -37,6 +37,12 @@ spec:
           env:
             - name: SCALE_UP_COUNT
               value: "5"
+            - name: WEBHOOK_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: remediation-webhook-secret
+                  key: secret
+                  optional: true
           resources:
             requests:
               cpu: 100m
@@ -87,3 +93,33 @@ subjects:
   - kind: ServiceAccount
     name: remediation-sa
     namespace: remediation
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: remediation-webhook-secret
+  namespace: remediation
+  annotations:
+    # Generate a random 32-char hex key: openssl rand -hex 16
+    secret-generator: static
+stringData:
+  secret: "e7b2c1a8f94d63e2b0a7c3f59e81d42a"
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: deny-webhook-from-outside
+  namespace: remediation
+spec:
+  podSelector:
+    matchLabels:
+      app: remediation-service
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+      ports:
+        - port: 8080
