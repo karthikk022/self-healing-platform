@@ -13,8 +13,8 @@ resource "aws_vpc" "main" {
   enable_dns_support   = true
 
   tags = {
-    Name                                                        = "${var.cluster_name}-vpc"
-    "kubernetes.io/cluster/${var.cluster_name}"                 = "shared"
+    Name                                        = "${var.cluster_name}-vpc"
+    "kubernetes.io/cluster/${var.cluster_name}" = "shared"
   }
 }
 
@@ -27,9 +27,9 @@ resource "aws_subnet" "public" {
   map_public_ip_on_launch = true
 
   tags = {
-    Name                                                        = "${var.cluster_name}-public-${count.index}"
-    "kubernetes.io/cluster/${var.cluster_name}"                 = "shared"
-    "kubernetes.io/role/elb"                                    = "1"
+    Name                                        = "${var.cluster_name}-public-${count.index}"
+    "kubernetes.io/cluster/${var.cluster_name}" = "shared"
+    "kubernetes.io/role/elb"                    = "1"
   }
 }
 
@@ -41,9 +41,9 @@ resource "aws_subnet" "private" {
   availability_zone = data.aws_availability_zones.available.names[count.index]
 
   tags = {
-    Name                                                        = "${var.cluster_name}-private-${count.index}"
-    "kubernetes.io/cluster/${var.cluster_name}"                 = "shared"
-    "kubernetes.io/role/internal-elb"                           = "1"
+    Name                                        = "${var.cluster_name}-private-${count.index}"
+    "kubernetes.io/cluster/${var.cluster_name}" = "shared"
+    "kubernetes.io/role/internal-elb"           = "1"
   }
 }
 
@@ -108,8 +108,8 @@ resource "aws_iam_role" "eks_cluster" {
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
-      Action = "sts:AssumeRole"
-      Effect = "Allow"
+      Action    = "sts:AssumeRole"
+      Effect    = "Allow"
       Principal = { Service = "eks.amazonaws.com" }
     }]
   })
@@ -147,8 +147,8 @@ resource "aws_iam_role" "eks_nodes" {
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
-      Action = "sts:AssumeRole"
-      Effect = "Allow"
+      Action    = "sts:AssumeRole"
+      Effect    = "Allow"
       Principal = { Service = "ec2.amazonaws.com" }
     }]
   })
@@ -195,7 +195,7 @@ resource "aws_eks_node_group" "main" {
 
 # Output kubeconfig
 resource "local_file" "kubeconfig" {
-  content = <<-EOT
+  content  = <<-EOT
     apiVersion: v1
     kind: Config
     preferences: {}
