@@ -1,82 +1,54 @@
+from kubernetes import client, config
 from fastapi import FastAPI, Request
-import subprocess
-import json
-import os
 import logging
+import os
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("remediation")
 
 app = FastAPI()
 
-REMEDIATION_ACTIONS = {
-    "scale_up": "kubectl scale deployment {name} -n {namespace} --replicas={count}",
-    "restart_pods": "kubectl rollout restart deployment {name} -n {namespace}",
-    "rollback": "kubectl rollout undo deployment {name} -n {namespace}",
-}
+config.load_incluster_config()
+apps_v1 = client.AppsV1Api()
+
+SCALE_UP_COUNT = int(os.environ.get("SCALE_UP_COUNT", "5"))
 
 @app.get("/health")
 def health():
     return {"status": "ok"}
 
+def scale_deployment(name, namespace, replicas):
+    body = {"spec": {"replicas": replicas}}
+    apps_v1.patch_namespaced_deployment_scale(name=name, namespace=namespace, body=body)
+    logger.info(f"Scaled {name}/{namespace} to {replicas}")
+
+def restart_deployment(name, namespace):
+    body = {"spec": {"template": {"metadata": {"annotations": {"kubectl.kubernetes.io/restartedAt": str(__import__('datetime').datetime.now())}}}}}
+    apps_v1.patch_namespaced_deployment(name=name, namespace=namespace, body=body)
+    logger.info(f"Restarted {name}/{namespace}")
+
 @app.post("/webhook")
 async def webhook(request: Request):
     payload = await request.json()
-    logger.info("Received alert: %s", json.dumps(payload, indent=2))
-
     alerts = payload.get("alerts", [])
+    logger.info(f"Received {len(alerts)} alert(s)")
+
     for alert in alerts:
         labels = alert.get("labels", {})
-        annotations = alert.get("annotations", {})
         alertname = labels.get("alertname", "")
         severity = labels.get("severity", "")
         namespace = labels.get("namespace", "default")
+        deployment = labels.get("deployment", "sample-app")
 
-        logger.info("Processing alert: %s (severity=%s)", alertname, severity)
+        logger.info(f"Processing: {alertname} (severity={severity})")
 
-        if alertname == "SLOTargetBreach":
-            deployment = labels.get("deployment", "sample-app")
-            action = "scale_up"
-            count = os.environ.get("SCALE_UP_COUNT", "5")
-            cmd = REMEDIATION_ACTIONS["scale_up"].format(
-                name=deployment, namespace=namespace, count=count
-            )
-            result = run_command(cmd)
-            logger.info("Scale up result: %s", result)
+        if alertname == "SLOTargetBreach" or alertname == "HighErrorRate":
+            scale_deployment(deployment, namespace, SCALE_UP_COUNT)
 
-        elif alertname == "ErrorBudgetBurned":
-            deployment = labels.get("deployment", "sample-app")
-            action = "restart_pods"
-            cmd = REMEDIATION_ACTIONS["restart_pods"].format(
-                name=deployment, namespace=namespace
-            )
-            result = run_command(cmd)
-            logger.info("Restart result: %s", result)
-
-            action = "rollback"
-            cmd = REMEDIATION_ACTIONS["rollback"].format(
-                name=deployment, namespace=namespace
-            )
-            result = run_command(cmd)
-            logger.info("Rollback result: %s", result)
-
-        elif alertname == "HighErrorRate":
-            deployment = labels.get("deployment", "sample-app")
-            action = "restart_pods"
-            cmd = REMEDIATION_ACTIONS["restart_pods"].format(
-                name=deployment, namespace=namespace
-            )
-            result = run_command(cmd)
-            logger.info("Restart result: %s", result)
+        if alertname == "HighErrorRate":
+            restart_deployment(deployment, namespace)
 
     return {"status": "processed", "alerts_count": len(alerts)}
-
-def run_command(cmd):
-    try:
-        result = subprocess.run(cmd.split(), capture_output=True, text=True, timeout=30)
-        return {"stdout": result.stdout, "stderr": result.stderr, "returncode": result.returncode}
-    except Exception as e:
-        return {"error": str(e)}
 
 if __name__ == "__main__":
     import uvicorn

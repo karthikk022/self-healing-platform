@@ -25,7 +25,7 @@ spec:
           command: ["sh", "-c"]
           args:
             - |
-              pip install flask gunicorn -q &&
+              pip install flask gunicorn prometheus-client -q &&
               python /app/main.py
           ports:
             - containerPort: 5000
