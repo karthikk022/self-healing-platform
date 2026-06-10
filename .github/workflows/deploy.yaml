@@ -1,1 +1,140 @@
-name: Deployon:  push:    branches: [master, main]    paths-ignore:      - '**.md'      - '.gitignore'  pull_request:    branches: [master, main]    paths-ignore:      - '**.md'      - '.gitignore'env:  AWS_REGION: ap-south-1  EKS_CLUSTER: self-healing-platformjobs:  terraform:    name: Terraform    if: ${{ github.actor != 'dependabot[bot]' }}    runs-on: ubuntu-latest    defaults:      run:        working-directory: cluster    steps:      - uses: actions/checkout@v4      - uses: hashicorp/setup-terraform@v3        with:          terraform_version: 1.9      - name: Configure AWS credentials        uses: aws-actions/configure-aws-credentials@v4        with:          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}          aws-region: ${{ env.AWS_REGION }}      - name: Terraform fmt        run: terraform fmt -check -diff      - name: Terraform Init        run: terraform init      - name: Terraform Validate        run: terraform validate      - name: Terraform Plan        if: github.event_name == 'pull_request'        run: terraform plan -no-color      - name: Terraform Apply        if: github.ref == 'refs/heads/master' && github.event_name == 'push'        run: terraform apply -auto-approve -no-color  deploy-k8s:    name: Deploy K8s manifests    runs-on: ubuntu-latest    needs: [terraform]    if: github.event_name == 'push' && github.ref == 'refs/heads/master'    steps:      - uses: actions/checkout@v4      - name: Configure AWS credentials        uses: aws-actions/configure-aws-credentials@v4        with:          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}          aws-region: ${{ env.AWS_REGION }}      - name: Update kubeconfig        run: |          aws eks update-kubeconfig --region ${{ env.AWS_REGION }} --name ${{ env.EKS_CLUSTER }}      - name: Detect changed files        id: changes        uses: dorny/paths-filter@v3        with:          filters: |            rules:              - 'monitoring/prometheus/rules/**'            policies:              - 'policies/kyverno/**'            remediation:              - 'remediation/deployment.yaml'              - 'remediation/main.py'            sample-app:              - 'sample-app/deployment.yaml'              - 'sample-app/main.py'      - name: Apply Prometheus rules        if: steps.changes.outputs.rules == 'true'        run: |          kubectl apply -f monitoring/prometheus/rules/prometheus-rule.yaml      - name: Apply Kyverno policies        if: steps.changes.outputs.policies == 'true'        run: |          kubectl apply -f policies/kyverno/policies.yaml      - name: Restart remediation pod        if: steps.changes.outputs.remediation == 'true'        run: |          kubectl rollout restart deployment/remediation-service -n remediation      - name: Restart sample-app pod        if: steps.changes.outputs.sample-app == 'true'        run: |          kubectl rollout restart deployment/sample-app -n sample-app  argocd-sync:    name: Sync ArgoCD    runs-on: ubuntu-latest    needs: [deploy-k8s]    if: github.event_name == 'push' && github.ref == 'refs/heads/master'    steps:      - uses: actions/checkout@v4      - name: Install ArgoCD CLI        run: |          curl -sSL -o /usr/local/bin/argocd https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64          chmod +x /usr/local/bin/argocd      - name: ArgoCD login        run: |          argocd login \            ${{ secrets.ARGOCD_SERVER }} \            --username admin \            --password ${{ secrets.ARGOCD_PASSWORD }} \            --insecure \            --grpc-web      - name: Sync applications        run: |          for app in remediation-service sample-app; do            argocd app sync $app --grpc-web            argocd app wait $app --grpc-web --health          done
+name: Deploy
+
+on:
+  push:
+    branches: [master, main]
+    paths-ignore:
+      - '**.md'
+      - '.gitignore'
+  pull_request:
+    branches: [master, main]
+    paths-ignore:
+      - '**.md'
+      - '.gitignore'
+
+env:
+  AWS_REGION: ap-south-1
+  EKS_CLUSTER: self-healing-platform
+
+jobs:
+  terraform:
+    name: Terraform
+    if: ${{ github.actor != 'dependabot[bot]' }}
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: cluster
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Terraform fmt
+        run: terraform fmt -check -diff
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Terraform Validate
+        run: terraform validate
+
+      - name: Terraform Plan
+        if: github.event_name == 'pull_request'
+        run: terraform plan -no-color
+
+      - name: Terraform Apply
+        if: github.ref == 'refs/heads/master' && github.event_name == 'push'
+        run: terraform apply -auto-approve -no-color
+
+  deploy-k8s:
+    name: Deploy K8s manifests
+    runs-on: ubuntu-latest
+    needs: [terraform]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Update kubeconfig
+        run: |
+          aws eks update-kubeconfig --region ${{ env.AWS_REGION }} --name ${{ env.EKS_CLUSTER }}
+
+      - name: Detect changed files
+        id: changes
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            rules:
+              - 'monitoring/prometheus/rules/**'
+            policies:
+              - 'policies/kyverno/**'
+            remediation:
+              - 'remediation/deployment.yaml'
+              - 'remediation/main.py'
+            sample-app:
+              - 'sample-app/deployment.yaml'
+              - 'sample-app/main.py'
+
+      - name: Apply Prometheus rules
+        if: steps.changes.outputs.rules == 'true'
+        run: |
+          kubectl apply -f monitoring/prometheus/rules/prometheus-rule.yaml
+
+      - name: Apply Kyverno policies
+        if: steps.changes.outputs.policies == 'true'
+        run: |
+          kubectl apply -f policies/kyverno/policies.yaml
+
+      - name: Restart remediation pod
+        if: steps.changes.outputs.remediation == 'true'
+        run: |
+          kubectl rollout restart deployment/remediation-service -n remediation
+
+      - name: Restart sample-app pod
+        if: steps.changes.outputs.sample-app == 'true'
+        run: |
+          kubectl rollout restart deployment/sample-app -n sample-app
+
+  argocd-sync:
+    name: Sync ArgoCD
+    runs-on: ubuntu-latest
+    needs: [deploy-k8s]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install ArgoCD CLI
+        run: |
+          curl -sSL -o /usr/local/bin/argocd https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64
+          chmod +x /usr/local/bin/argocd
+
+      - name: ArgoCD login
+        run: |
+          argocd login \
+            ${{ secrets.ARGOCD_SERVER }} \
+            --username admin \
+            --password ${{ secrets.ARGOCD_PASSWORD }} \
+            --insecure \
+            --grpc-web
+
+      - name: Sync applications
+        run: |
+          for app in remediation-service sample-app; do
+            argocd app sync $app --grpc-web
+            argocd app wait $app --grpc-web --health
+          done
