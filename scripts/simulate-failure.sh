@@ -20,3 +20,4 @@ echo "Step 5: Restoring normal error rate..."
 kubectl set env deployment/sample-app -n sample-app ERROR_RATE=0.05
 
 echo "=== Done - Check ArgoCD and Grafana for recovery ==="
+# CI trigger
